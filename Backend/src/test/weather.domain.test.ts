@@ -48,6 +48,9 @@ describe("Weather Service", ()=>{
         const lon = -75.2;
         const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
         weatherCache.clearInFlight(cacheKey);
+
+        process.env.API_URL = "http://dummy.url";
+        process.env.API_KEY = "dummy_key";
     });
 
     describe("Get API Response", () => {
