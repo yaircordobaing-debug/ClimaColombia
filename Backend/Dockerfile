@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
+RUN npm install -g ts-node-dev typescript
 RUN npm install
 
 COPY . .
