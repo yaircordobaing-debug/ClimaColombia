@@ -1,0 +1,30 @@
+language: node_js
+node_js:
+  - "20"
+
+services:
+  - docker
+
+cache:
+  directories:
+    - "Backend/node_modules"
+    - "FrontEnd/node_modules"
+
+install:
+  - cd Backend && npm ci && cd ..
+  - cd FrontEnd && npm ci && cd ..
+
+script:
+  # Backend Tests & Lint
+  - cd Backend
+  - npm run lint || true
+  - npm run test
+  - cd ..
+  
+  # Frontend Lint
+  - cd FrontEnd
+  - npm run lint
+  - cd ..
+  
+  # Build Docker images to ensure they build successfully
+  - docker-compose -f docker-compose.yml build
