@@ -58,6 +58,7 @@ const ibagueLocations: LocationPoint[] = [
 ];
 
 const Map = () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_coords, setCoords] = useState<[number, number] | null>(null);
   const [zoom, setZoom] = useState(12.5);
   const [responses, setResponses] = useState<CurrentWeather[]>([]);
