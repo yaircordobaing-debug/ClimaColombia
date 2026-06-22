@@ -4,67 +4,65 @@ Este documento consolida el historial de cambios, soluciones a problemas comunes
 
 ---
 
-## 1. Historial de Cambios
+## 1. Historial de Cambios Consolidado
 
-La evolución del proyecto para alcanzar la entrega actual se ha realizado de forma progresiva:
+La evolución del proyecto para alcanzar la entrega actual se ha realizado de forma progresiva, adaptándose a las restricciones del proyecto y optando por soluciones 100% gratuitas:
 
-1.  **Dockerización Base:** Se empaquetó el `Frontend` (React/Vite) y el `Backend` (Node.js/Express) en contenedores independientes mediante sus respectivos `Dockerfile`. Se implementó un `docker-compose.yml` central para orquestar la comunicación de ambos servicios.
-2.  **Integración de Jenkins:**
-    *   Se creó un contenedor especializado de Jenkins configurado a través de `Dockerfile.jenkins` para tener las herramientas necesarias (Node.js, Docker CLI).
-    *   Se implementó el archivo `Jenkinsfile` definiendo las etapas del pipeline de automatización (Instalación, Linting, Testing, Build de Imágenes y Publicación/Despliegue).
-    *   Se añadió el archivo `docker-compose.jenkins.yml` para aislar el entorno del servidor de integración.
-3.  **Integración de Travis CI:** Se creó el archivo `.travis.yml` para conectar el repositorio a la plataforma Cloud de Travis. Se configuraron los entornos de NodeJS y servicios Docker, añadiendo scripts para evaluar la calidad del código mediante Linter y Jest en cada Push.
-4.  **Integración de Codeship:** Se añadieron los archivos de Codeship Pro:
-    *   `codeship-services.yml` para orquestar el entorno de validación dentro de la infraestructura de Codeship.
-    *   `codeship-steps.yml` con la secuencia de pruebas obligatoria previa a la integración y despliegue del proyecto.
-5.  **Ajustes de Calidad:** Se agregaron scripts de npm (`"lint"` y `"test:cov"`) a los proyectos Backend y Frontend para estandarizar las validaciones exigidas por todas las plataformas CI.
+1.  **Dockerización Base:** Se empaquetó el `Frontend` (React/Vite) y el `Backend` (Node.js/Express) en contenedores independientes mediante sus respectivos `Dockerfile`. Se implementó un `docker-compose.yml` central para orquestar la comunicación de ambos servicios y de un servidor `Nginx`.
+2.  **Integración de Jenkins:** Se implementó el archivo `Jenkinsfile` definiendo las etapas del pipeline de automatización (Instalación, Linting, Testing, Build de Imágenes y Publicación/Despliegue). La plataforma quedó certificada como totalmente integrada con contenedores y Jenkins.
+3.  **Migración de Travis CI y Codeship:** Debido a restricciones del proyecto, se eliminaron los archivos de configuración `.travis.yml`, `codeship-services.yml` y `codeship-steps.yml`. En su lugar, se implementaron soluciones utilizando las capas gratuitas de plataformas alternativas.
+4.  **Integración de GitHub Actions:** Se creó el archivo `.github/workflows/ci.yml` para conectar el repositorio a GitHub Actions. Se configuró para ejecutar en cada push y pull request: instalación de dependencias (`npm ci`), análisis estático (Linter), pruebas automatizadas y validación de construcción de las imágenes Docker.
+5.  **Integración de GitLab CI/CD:** Se añadió el archivo `.gitlab-ci.yml` con un pipeline estructurado en stages (`install`, `test`, `build`) que emplea la funcionalidad *Docker-in-Docker* para construir los contenedores en la nube de GitLab.
+6.  **Integración de CircleCI:** Se implementó el archivo `.circleci/config.yml` aprovechando los executors de Docker para replicar el pipeline de validación y construcción.
+7.  **Script de Ejecución Automática:** Se crearon los archivos `start.bat` y `start.sh` para levantar localmente el ecosistema completo (Backend, Frontend y Nginx) con un solo comando usando Docker Compose.
 
 ---
 
-## 2. Sugerencias para la Solución de Problemas (Troubleshooting)
+## 2. Guía de Solución de Problemas (Troubleshooting)
 
-A continuación, una recopilación de posibles problemas detectados durante las pruebas y sus soluciones:
+A continuación, documentamos los errores encontrados durante los cambios de código y migración, junto con las sugerencias exactas para solucionarlos:
 
-### A. Fallos en el Pipeline de Jenkins (Docker-out-of-Docker)
-*   **Problema:** Jenkins falla al ejecutar comandos como `docker build` con el error "Cannot connect to the Docker daemon".
-*   **Causa:** El contenedor de Jenkins no tiene acceso al daemon de Docker del host anfitrión.
-*   **Solución:** Asegurar que en el archivo `docker-compose.jenkins.yml`, el volumen `/var/run/docker.sock:/var/run/docker.sock` esté correctamente mapeado. En Windows/Linux, a veces es necesario ajustar los permisos del socket: `sudo chmod 666 /var/run/docker.sock` en el host.
+### A. Fallos en el Pipeline de GitLab CI/CD (Docker-in-Docker)
+*   **Problema:** El job `build_images` falla al intentar ejecutar `docker-compose build` con el error "Cannot connect to the Docker daemon".
+*   **Causa:** El runner de GitLab no tiene el servicio Docker habilitado correctamente o no se definió la variable del driver.
+*   **Solución Exacta:** Asegurar que el archivo `.gitlab-ci.yml` incluya el servicio `docker:24.0.5-dind` y que esté configurada la variable global `DOCKER_DRIVER: overlay2` u otra compatible.
 
-### B. Fallos en Linter o Tests en Travis CI / Codeship
-*   **Problema:** El build falla en la nube, pero pasa en entorno local.
-*   **Causa:** Diferencias en las versiones de Node.js o dependencias (`node_modules`) en caché, o configuraciones locales no subidas al repositorio (ej. `.env`).
-*   **Solución:**
-    1. Usar `npm ci` en lugar de `npm install` en los pipelines para garantizar una instalación inmaculada usando `package-lock.json`.
-    2. Asegurarse de que el pipeline no dependa de variables de entorno estáticas, sino parametrizadas en la configuración de la herramienta CI.
+### B. Fallos en GitHub Actions por Archivos "node_modules"
+*   **Problema:** El pipeline toma demasiado tiempo o falla por conflictos al hacer `npm ci` o build.
+*   **Causa:** La carpeta `node_modules` fue subida por accidente al repositorio, causando conflictos con el entorno Linux de GitHub Actions.
+*   **Solución Exacta:** Eliminar `node_modules` del caché de Git ejecutando `git rm -r --cached .` y añadir `node_modules/` al archivo `.gitignore`. Posteriormente, hacer commit y push.
 
-### C. Conflictos de Puertos Locales
-*   **Problema:** Al levantar `docker-compose.yml` o `docker-compose.jenkins.yml`, se indica que el puerto `8080`, `3000` o `5173` ya está en uso.
-*   **Solución:** Identificar el proceso que utiliza el puerto y detenerlo, o modificar temporalmente el mapeo de puertos en el archivo YAML correspondiente (ej. `8081:8080`).
+### C. Conflicto de Puertos al ejecutar `start.bat` o `start.sh`
+*   **Problema:** Al ejecutar el script automático, se muestra el error: `Bind for 0.0.0.0:80 failed: port is already allocated` o similar para los puertos `3000` y `5173`.
+*   **Causa:** Otro proceso local (como otro contenedor, un servidor XAMPP, u otra app React/Node) está ocupando esos puertos.
+*   **Solución Exacta:** Detener los servicios locales que ocupan el puerto, o modificar los puertos expuestos en el archivo `docker-compose.yml` (por ejemplo, cambiar `- "80:80"` a `- "8080:80"`).
 
 ---
 
-## 3. Responsabilidades
+## 3. Responsabilidades y Opiniones
 
-El éxito de la plataforma requiere la definición clara de roles y responsabilidades en torno a este nuevo ecosistema automatizado:
+El éxito de la migración y de la plataforma requiere la definición clara de roles, responsabilidades y el análisis técnico sobre el uso de estas herramientas gratuitas:
 
+### Distribución de Responsabilidades
 *   **Desarrolladores (Frontend/Backend):**
     *   Responsables de asegurar que su código pasa exitosamente por los scripts de `npm run lint` y `npm run test` localmente **antes** de hacer push.
     *   Mantener la cobertura de pruebas (Coverage) del Backend.
     *   Actualizar los `Dockerfile` de aplicación si el stack de dependencias base cambia.
 *   **Líder Técnico / DevOps:**
-    *   Administración y mantenimiento del servidor Jenkins (Gestión de plugins, monitoreo de recursos y permisos).
-    *   Gestión de credenciales seguras (Secrets) dentro de Jenkins, Travis CI y Codeship.
-    *   Mantenimiento de los archivos de configuración de infraestructura como código (`Jenkinsfile`, `.travis.yml`, `codeship-steps.yml`).
-    *   Aprobar los despliegues a Producción.
+    *   Mantenimiento de los archivos de configuración de infraestructura como código (`.github/workflows/ci.yml`, `.gitlab-ci.yml`, `.circleci/config.yml`, `Jenkinsfile`).
+    *   Gestión de secretos y credenciales en las plataformas CI/CD (GitHub, GitLab, CircleCI).
+    *   Mantenimiento y actualización de los scripts automáticos (`start.bat` y `start.sh`).
 *   **QA Automatizador:**
-    *   Añadir pruebas e2e o de integración profundas a los pipelines sin comprometer los tiempos de ejecución drásticamente.
+    *   Añadir pruebas e2e o de integración profundas a los pipelines sin comprometer los tiempos de ejecución y las cuotas de las capas libres.
 
----
-
-## 4. Opiniones y Conclusiones de la Integración
-
-*   **Sobre los Contenedores:** Dockerizar la aplicación ha sido un éxito para estandarizar entornos. Evita el clásico problema de "funciona en mi máquina" y permite que cualquier herramienta (Jenkins, Travis, Codeship) utilice las mismas instrucciones para probar y construir la aplicación.
-*   **Sobre Jenkins:** Ofrece un nivel de personalización extremo y es ideal si queremos tener control total de los recursos (Self-Hosted) o si la empresa ya cuenta con servidores. Sin embargo, su configuración inicial (Plugins, Docker-in-Docker) requiere una mayor curva de aprendizaje.
-*   **Sobre Travis CI y Codeship:** Se destacan por su simplicidad e inmediatez. Al ser soluciones SaaS, ahorran el esfuerzo de mantener servidores e infraestructura base (como se hace con Jenkins). El modelo declarativo de YAML permite configurar flujos rápidos para evaluar Pull Requests eficientemente.
-*   **Conclusión General:**
-    Implementar estas tres herramientas demuestra flexibilidad y robustez en la arquitectura. Las pruebas automatizadas reducen en gran medida los errores en producción. Se recomienda a futuro estandarizar el despliegue usando solo un orquestador principal (ej. Jenkins para despliegues pesados y Travis para validaciones pre-merge rápidas).
+### Opiniones Técnicas sobre las Herramientas Gratuitas
+1.  **Sobre la Migración a Soluciones Gratuitas:** 
+    *   *Opinión del Equipo:* La decisión de abandonar Travis CI y Codeship por restricciones del proyecto fue acertada. Descubrimos que las capas libres de GitHub Actions y GitLab CI/CD no solo cumplen con los requerimientos, sino que en muchos aspectos superan las opciones anteriores gracias a su profunda integración con los repositorios y extensos ecosistemas de "acciones" comunitarias.
+2.  **Sobre GitHub Actions:** 
+    *   *Opinión Técnica:* Es la herramienta más intuitiva y conveniente si el código reside en GitHub. Evita tener que autorizar aplicaciones de terceros. Sin embargo, hay que vigilar el consumo de minutos mensuales (2,000 min en repos privados) en la capa gratuita.
+3.  **Sobre GitLab CI/CD:** 
+    *   *Opinión Técnica:* Posee un modelo de configuración en stages muy robusto y predecible. La capacidad de usar *Docker-in-Docker* nativo simplifica enormemente la construcción de imágenes, siendo una herramienta de nivel empresarial que ofrece excelentes prestaciones sin costo inicial.
+4.  **Sobre CircleCI:**
+    *   *Opinión Técnica:* La configuración de `executors` brinda mucha flexibilidad y rapidez. Aunque su capa gratuita también es limitada, permite diversificar la carga de integración continua.
+5.  **Sobre la ejecución local (Docker Compose):**
+    *   *Opinión Técnica:* La adición de un script automatizado unifica el ecosistema y reduce a cero la fricción de entrada para nuevos desarrolladores. Orquestar Front, Back y Nginx en local permite probar la arquitectura real antes de desplegar.

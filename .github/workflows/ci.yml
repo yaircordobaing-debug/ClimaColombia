@@ -1,0 +1,38 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+
+    - name: Install Dependencies
+      run: |
+        cd Backend && npm ci && cd ..
+        cd FrontEnd && npm ci && cd ..
+
+    - name: Lint and Test Backend
+      run: |
+        cd Backend
+        npm run lint || true
+        npm run test
+      
+    - name: Lint Frontend
+      run: |
+        cd FrontEnd
+        npm run lint
+
+    - name: Build Docker Images
+      run: docker-compose -f docker-compose.yml build

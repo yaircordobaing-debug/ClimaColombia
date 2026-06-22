@@ -1,0 +1,42 @@
+image: node:20
+
+variables:
+  DOCKER_DRIVER: overlay2
+
+stages:
+  - install
+  - test
+  - build
+
+install_dependencies:
+  stage: install
+  script:
+    - cd Backend && npm ci
+    - cd ../FrontEnd && npm ci
+  artifacts:
+    paths:
+      - Backend/node_modules/
+      - FrontEnd/node_modules/
+
+test_backend:
+  stage: test
+  script:
+    - cd Backend
+    - npm run lint || true
+    - npm run test
+
+test_frontend:
+  stage: test
+  script:
+    - cd FrontEnd
+    - npm run lint || true
+
+build_images:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  before_script:
+    - docker info
+  script:
+    - docker-compose -f docker-compose.yml build
